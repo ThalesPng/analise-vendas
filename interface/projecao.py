@@ -13,7 +13,7 @@ from banco import FONTE_PADRAO
 from relatorios.projecao import perfil_horario, projetar_dia
 from relatorios.utils import min_hora
 
-from .formato import brl, dkey, nome_dia, parse_data, parse_hora, pct
+from .formato import brl, dkey, nome_dia, parse_data, parse_hora, pct, qtde
 from .widgets import HoraEntry, campo_data
 
 
@@ -75,12 +75,12 @@ class AbaProjecao(ttk.Frame):
 
         corpo = ttk.Frame(f)
         corpo.pack(fill="both", expand=True, pady=(6, 0))
-        colunas = ("faixa", "media", "pct", "acum", "hoje", "obs")
+        colunas = ("faixa", "media", "vendas", "pct", "hoje", "obs")
         self.tree_perfil = ttk.Treeview(corpo, columns=colunas, show="headings",
                                         selectmode="browse", height=8)
-        cab = {"faixa": "Faixa", "media": "Média vendida", "pct": "% do dia",
-               "acum": "% acumulado", "hoje": "Hoje", "obs": ""}
-        larg = {"faixa": 130, "media": 130, "pct": 90, "acum": 110, "hoje": 120, "obs": 90}
+        cab = {"faixa": "Faixa", "media": "Média vendida", "vendas": "Vendas (média)",
+               "pct": "% do dia", "hoje": "Hoje", "obs": ""}
+        larg = {"faixa": 130, "media": 130, "vendas": 110, "pct": 90, "hoje": 120, "obs": 90}
         for c in colunas:
             self.tree_perfil.heading(c, text=cab[c])
             self.tree_perfil.column(c, width=larg[c], anchor="w" if c in ("faixa", "obs") else "e")
@@ -183,5 +183,5 @@ class AbaProjecao(ttk.Frame):
             pico = fx["inicio"] == p["pico"]
             self.tree_perfil.insert(
                 "", "end", tags=("pico",) if pico else (),
-                values=(f"{fx['inicio']} – {fx['fim']}", brl(fx["media"]), pct(fx["pct"]),
-                        pct(fx["acumulado_pct"]), hoje, "★ pico" if pico else ""))
+                values=(f"{fx['inicio']} – {fx['fim']}", brl(fx["media"]),
+                        qtde(fx["vendas"]), pct(fx["pct"]), hoje, "★ pico" if pico else ""))

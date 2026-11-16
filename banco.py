@@ -8,13 +8,17 @@ Quem chama não precisa saber de conexão, SQL ou XML.
 Item normalizado (o ÚNICO contrato entre este módulo e o resto):
     {"cod": "1180", "descricao": "BOLO DE CENOURA", "qtde": 1.0,
      "valor_total": 22.45, "cod_depart": "7", "departamento": "CONFEITARIA",
-     "data": "09-11-2026", "hora": "09:31"}
+     "data": "09-11-2026", "hora": "09:31", "id_venda": "3526110..."}
     - data "DD-MM-AAAA" da venda (a fonte é chamada uma vez para o intervalo inteiro;
       quem consome agrupa por dia em memória)
     - qtde na unidade de venda do produto (UN, KG...), como no XML
     - valor_total já líquido de desconto
     - cod_depart / departamento "" quando desconhecidos
     - hora "HH:MM" da venda ("" quando desconhecida)
+    - id_venda identifica a venda a que o item pertence: todos os itens da mesma venda
+      trazem o mesmo valor, e ele é único entre todos os caixas (hoje, a chave de
+      acesso da NFC-e; no banco, combine caixa e número se o número só for único por
+      caixa). É o que permite contar vendas (relatorios/vendas.py).
 
 Hoje a fonte é provisória (fonte_nfce: lê os !vendas_*.json de todos os caixas via
 vendas_nfce.listar_vendas, já sincronizados pelo OneDrive). Quando tudo vier do
@@ -116,7 +120,8 @@ def fonte_nfce(data_ini, data_fim=None, hora_ini=None, hora_fim=None, pasta_vend
               "qtde": i.get("qtde") or 0.0, "valor_total": i["valor_total"],
               "cod_depart": i.get("cod_depart") or "",
               "departamento": i.get("departamento") or "",
-              "data": v.get("data") or "", "hora": (v.get("hora") or "")[:5]}
+              "data": v.get("data") or "", "hora": (v.get("hora") or "")[:5],
+              "id_venda": v["id"]}
              for v in vendas for i in v["itens"]]
 
     faltando = {i["cod"] for i in itens
@@ -137,7 +142,8 @@ def fonte_banco(data_ini, data_fim=None, hora_ini=None, hora_fim=None):
     normalizado, de data_ini a data_fim (e da faixa hora_ini a hora_fim, se
     houver) de todos os caixas — numa única consulta para o intervalo inteiro
     (nunca uma por dia), já com o departamento (JOIN) e com "data" em
-    DD-MM-AAAA em cada item. A consulta SQL fica aqui, com _conectar_sammi()."""
+    DD-MM-AAAA e "id_venda" (único por venda) em cada item. A consulta SQL fica aqui,
+    com _conectar_sammi()."""
     raise NotImplementedError("fonte_banco ainda não implementada")
 
 

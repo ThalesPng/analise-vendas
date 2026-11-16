@@ -9,6 +9,7 @@ from statistics import median, quantiles
 
 import config as cfg
 from .utils import agrupar_por_dia, dias_entre, faixa, hora_min, min_hora
+from .vendas import id_venda
 
 
 # ── Projeção do dia e perfil por hora ────────────────────────────────────────
@@ -23,7 +24,7 @@ MIN_DIAS_CONFIAVEL = 3
 
 
 def _vendas_por_dia(fonte, datas, cache, hoje):
-    """{data: [(minuto, valor), ...]} ordenado, para cada data de `datas`.
+    """{data: [(minuto, valor, id_venda), ...]} ordenado, para cada data de `datas`.
     Uma ÚNICA chamada à fonte cobre o intervalo das datas que faltam no cache;
     os itens são agrupados por item["data"] em memória. Só dias anteriores a
     `hoje` vão ao cache."""
@@ -35,7 +36,7 @@ def _vendas_por_dia(fonte, datas, cache, hoje):
         lidos = {d: [] for d in dias_entre(ini, fim)}
         itens_dia = agrupar_por_dia(fonte(ini, fim, None, None))
         for d in lidos:
-            lidos[d] = [(min_hora(i["hora"]), i["valor_total"])
+            lidos[d] = [(min_hora(i["hora"]), i["valor_total"], id_venda(i))
                         for i in itens_dia.get(d, []) if i.get("hora")]
         for d, vendas in lidos.items():
             vendas.sort()
@@ -58,7 +59,7 @@ def _dias_validos(vendas_dias, datas):
     lidos = []
     for d in datas:
         v = vendas_dias[d]
-        lidos.append((d, v, round(sum(x for _, x in v), 2)))
+        lidos.append((d, v, round(sum(x for _, x, _ in v), 2)))
     descartados = [(d, "sem vendas") for d, _, t in lidos if t <= 0]
     lidos = [x for x in lidos if x[2] > 0]
     if len(lidos) >= 3:
@@ -75,9 +76,11 @@ def perfil_horario(fonte, data_ref, semanas=8, passo_min=60, cache=None):
 
     Retorna {dia_semana: {"dias": n, "descartados": [(data, motivo)],
                           "media_total": R$ médio do dia,
-                          "faixas": [{"inicio","fim","media","pct","acumulado_pct"}],
+                          "faixas": [{"inicio","fim","media","vendas","pct"}],
                           "pico": "HH:MM" da faixa mais forte}}
-    (dia da semana sem nenhum dia válido: "dias" = 0 e "faixas" vazia)."""
+    "media" é o valor médio vendido na faixa e "vendas" a quantidade média de vendas
+    na faixa, ambos por dia válido (dia da semana sem nenhum dia válido: "dias" = 0 e
+    "faixas" vazia)."""
     hoje = datetime.strptime(data_ref, cfg.FMT_DATA)
     por_dia = {n: [] for n in range(7)}
     anteriores = _datas_anteriores(data_ref, semanas)
@@ -92,21 +95,24 @@ def perfil_horario(fonte, data_ref, semanas=8, passo_min=60, cache=None):
             perfil[dia] = {"dias": 0, "descartados": descartados, "media_total": 0.0,
                            "faixas": [], "pico": None}
             continue
-        soma = {}
+        soma, qtd_vendas = {}, {}
         for _, vendas, _ in validos:
-            for m, v in vendas:
+            ids_dia = {}                       # faixa -> ids das vendas desse dia nela
+            for m, v, idv in vendas:
                 k = faixa(m, passo_min)
                 soma[k] = soma.get(k, 0.0) + v
+                ids_dia.setdefault(k, set()).add(idv)
+            for k, ids in ids_dia.items():
+                qtd_vendas[k] = qtd_vendas.get(k, 0) + len(ids)
         n = len(validos)
         media_total = sum(soma.values()) / n
-        faixas, acumulado = [], 0.0
+        faixas = []
         for k in range(min(soma), max(soma) + 1, passo_min):
             media = soma.get(k, 0.0) / n
-            acumulado += media
             faixas.append({"inicio": hora_min(k), "fim": hora_min(min(k + passo_min, 1439)),
                            "media": round(media, 2),
-                           "pct": round(media / media_total * 100, 2),
-                           "acumulado_pct": round(acumulado / media_total * 100, 2)})
+                           "vendas": round(qtd_vendas.get(k, 0) / n, 1),
+                           "pct": round(media / media_total * 100, 2)})
         pico = max(faixas, key=lambda f: f["media"])["inicio"]
         perfil[dia] = {"dias": n, "descartados": descartados,
                        "media_total": round(media_total, 2), "faixas": faixas, "pico": pico}
@@ -129,7 +135,7 @@ def projetar_dia(fonte, data, ate_hora, semanas=8, cache=None, passo_min=60):
     mesmos = [d for d in _datas_anteriores(data, semanas)
               if datetime.strptime(d, cfg.FMT_DATA).weekday() == hoje.weekday()]
     vendas_dias = _vendas_por_dia(fonte, [data] + mesmos, cache, hoje)
-    ate_agora = [(m, v) for m, v in vendas_dias[data] if m <= limite]
+    ate_agora = [(m, v) for m, v, _ in vendas_dias[data] if m <= limite]
     vendido = round(sum(v for _, v in ate_agora), 2)
     por_faixa = {}
     for m, v in ate_agora:
@@ -146,7 +152,7 @@ def projetar_dia(fonte, data, ate_hora, semanas=8, cache=None, passo_min=60):
         return res
 
     totais = [t for _, _, t in validos]
-    acums = [sum(v for m, v in vendas if m <= limite) for _, vendas, _ in validos]
+    acums = [sum(v for m, v, _ in vendas if m <= limite) for _, vendas, _ in validos]
     res["media_total_historico"] = round(sum(totais) / len(totais), 2)
     fracao = sum(acums) / sum(totais)
     res["fracao"] = round(fracao, 4)
