@@ -13,7 +13,7 @@ from banco import FONTE_PADRAO
 from relatorios.projecao import perfil_horario, projetar_dia
 from relatorios.utils import min_hora
 
-from .formato import brl, dkey, nome_dia, parse_data, parse_hora, pct, qtde
+from .formato import brl, dkey, nome_dia, parse_data, parse_hora, qtde
 from .widgets import HoraEntry, campo_data
 
 
@@ -75,12 +75,13 @@ class AbaProjecao(ttk.Frame):
 
         corpo = ttk.Frame(f)
         corpo.pack(fill="both", expand=True, pady=(6, 0))
-        colunas = ("faixa", "media", "vendas", "pct", "hoje", "obs")
+        colunas = ("faixa", "media", "vendas", "vendas_hoje", "hoje", "obs")
         self.tree_perfil = ttk.Treeview(corpo, columns=colunas, show="headings",
                                         selectmode="browse", height=8)
         cab = {"faixa": "Faixa", "media": "Média vendida", "vendas": "Vendas (média)",
-               "pct": "% do dia", "hoje": "Hoje", "obs": ""}
-        larg = {"faixa": 130, "media": 130, "vendas": 110, "pct": 90, "hoje": 120, "obs": 90}
+               "vendas_hoje": "Vendas (hoje)", "hoje": "Hoje", "obs": ""}
+        larg = {"faixa": 130, "media": 130, "vendas": 110, "vendas_hoje": 110,
+                "hoje": 120, "obs": 90}
         for c in colunas:
             self.tree_perfil.heading(c, text=cab[c])
             self.tree_perfil.column(c, width=larg[c], anchor="w" if c in ("faixa", "obs") else "e")
@@ -175,13 +176,14 @@ class AbaProjecao(ttk.Frame):
         self.tree_perfil.heading("hoje", text=f"Hoje (até {self.proj_hora})"
                                  if eh_dia_projetado else "Hoje")
         for fx in p["faixas"]:
-            hoje = ""
+            hoje = vendas_hoje = ""
             if eh_dia_projetado:
                 m = min_hora(fx["inicio"])
                 if m <= min_hora(self.proj_hora):
                     hoje = brl(self.proj["por_faixa"].get(m, 0.0))
+                    vendas_hoje = qtde(self.proj["vendas_por_faixa"].get(m, 0))
             pico = fx["inicio"] == p["pico"]
             self.tree_perfil.insert(
                 "", "end", tags=("pico",) if pico else (),
                 values=(f"{fx['inicio']} – {fx['fim']}", brl(fx["media"]),
-                        qtde(fx["vendas"]), pct(fx["pct"]), hoje, "★ pico" if pico else ""))
+                        qtde(fx["vendas"]), vendas_hoje, hoje, "★ pico" if pico else ""))

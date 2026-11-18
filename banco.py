@@ -22,7 +22,9 @@ Item normalizado (o ÚNICO contrato entre este módulo e o resto):
 
 Hoje a fonte é provisória (fonte_nfce: lê os !vendas_*.json de todos os caixas via
 vendas_nfce.listar_vendas, já sincronizados pelo OneDrive). Quando tudo vier do
-banco, implemente fonte_banco() e aponte FONTE_PADRAO para ela; o resto não muda.
+banco, escreva uma fonte com a mesma assinatura (uma única consulta para o intervalo
+inteiro, nunca uma por dia, já com o departamento por JOIN) e aponte FONTE_PADRAO
+para ela; o resto não muda.
 
 Chamadas ao banco: só para descobrir o departamento dos produtos, numa única
 consulta por carga (um único lote) e apenas para códigos ainda desconhecidos —
@@ -108,7 +110,7 @@ def fonte_nfce(data_ini, data_fim=None, hora_ini=None, hora_fim=None, pasta_vend
     listar_vendas() já junta os arquivos de todos os caixas. Os itens gravados
     não trazem departamento, então ele é buscado no banco aqui — uma consulta
     para os produtos ainda desconhecidos (o resto vem do cache em memória).
-    Descartável quando existir fonte_banco()."""
+    Descartável quando a fonte vier direto do banco."""
     import vendas_nfce
     vendas = vendas_nfce.listar_vendas(data_ini, data_fim or data_ini,
                                        pasta_vendas=pasta_vendas or cfg.pasta_vendas())
@@ -135,16 +137,6 @@ def fonte_nfce(data_ini, data_fim=None, hora_ini=None, hora_fim=None, pasta_vend
         if not i["cod_depart"] and i["cod"] in _cache_departamentos:
             i["cod_depart"], i["departamento"] = _cache_departamentos[i["cod"]]
     return itens
-
-
-def fonte_banco(data_ini, data_fim=None, hora_ini=None, hora_fim=None):
-    """FONTE FUTURA: itens vendidos direto do banco, no mesmo formato de item
-    normalizado, de data_ini a data_fim (e da faixa hora_ini a hora_fim, se
-    houver) de todos os caixas — numa única consulta para o intervalo inteiro
-    (nunca uma por dia), já com o departamento (JOIN) e com "data" em
-    DD-MM-AAAA e "id_venda" (único por venda) em cada item. A consulta SQL fica aqui,
-    com _conectar_sammi()."""
-    raise NotImplementedError("fonte_banco ainda não implementada")
 
 
 FONTE_PADRAO = fonte_nfce

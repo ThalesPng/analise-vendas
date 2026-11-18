@@ -8,8 +8,7 @@ de dados, então podem ser testadas com dados falsos.
   historico.py     aba Histórico: histórico por dia/faixa, aplicação de grupos e o
                    estado da seleção e dos grupos (classe Grupos)
   projecao.py      aba Projeção do dia: fechamento estimado e perfil por hora
-  vendas.py        quantidade de vendas (id_venda do item): contar_vendas e
-                   contar_vendas_periodo
+  vendas.py        id_venda do item (a projeção conta vendas com ele)
 
 A exportação do histórico para .xlsx (excel.py) fica na raiz, fora daqui: faz I/O e
 tem escopo próprio, que tende a crescer.

@@ -47,7 +47,7 @@ class BarraPeriodo(ttk.LabelFrame):
         ttk.Label(per, text="Horas vazias = dia inteiro.",
                   foreground="#666").grid(row=1, column=4, columnspan=2, sticky="w", padx=(16, 0))
         for e in (self.ent_ini, self.ent_fim, self.ent_hi, self.ent_hf):
-            e.bind("<Return>", lambda ev: app.carregar())
+            e.bind("<Return>", lambda _evento: app.carregar())
 
     def definir_ocupado(self, ocupado):
         self.btn_carregar.configure(state="disabled" if ocupado else "normal")

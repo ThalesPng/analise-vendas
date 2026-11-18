@@ -76,7 +76,7 @@ def perfil_horario(fonte, data_ref, semanas=8, passo_min=60, cache=None):
 
     Retorna {dia_semana: {"dias": n, "descartados": [(data, motivo)],
                           "media_total": R$ médio do dia,
-                          "faixas": [{"inicio","fim","media","vendas","pct"}],
+                          "faixas": [{"inicio","fim","media","vendas"}],
                           "pico": "HH:MM" da faixa mais forte}}
     "media" é o valor médio vendido na faixa e "vendas" a quantidade média de vendas
     na faixa, ambos por dia válido (dia da semana sem nenhum dia válido: "dias" = 0 e
@@ -111,8 +111,7 @@ def perfil_horario(fonte, data_ref, semanas=8, passo_min=60, cache=None):
             media = soma.get(k, 0.0) / n
             faixas.append({"inicio": hora_min(k), "fim": hora_min(min(k + passo_min, 1439)),
                            "media": round(media, 2),
-                           "vendas": round(qtd_vendas.get(k, 0) / n, 1),
-                           "pct": round(media / media_total * 100, 2)})
+                           "vendas": round(qtd_vendas.get(k, 0) / n, 1)})
         pico = max(faixas, key=lambda f: f["media"])["inicio"]
         perfil[dia] = {"dias": n, "descartados": descartados,
                        "media_total": round(media_total, 2), "faixas": faixas, "pico": pico}
@@ -129,24 +128,28 @@ def projetar_dia(fonte, data, ate_hora, semanas=8, cache=None, passo_min=60):
 
     Retorna dict: vendido, fracao (0-1), estimativa, baixa, alta, aditivo, dias,
     descartados, media_total_historico, avisos (lista de textos) e
-    por_faixa ({minuto de início da faixa de passo_min: vendido até ate_hora})."""
+    por_faixa ({minuto de início da faixa de passo_min: vendido até ate_hora}) e
+    vendas_por_faixa ({minuto de início da faixa: quantidade de vendas até ate_hora},
+    contadas como o "vendas" de perfil_horario, para comparar com a média)."""
     hoje = datetime.strptime(data, cfg.FMT_DATA)
     limite = min_hora(ate_hora)
     mesmos = [d for d in _datas_anteriores(data, semanas)
               if datetime.strptime(d, cfg.FMT_DATA).weekday() == hoje.weekday()]
     vendas_dias = _vendas_por_dia(fonte, [data] + mesmos, cache, hoje)
-    ate_agora = [(m, v) for m, v, _ in vendas_dias[data] if m <= limite]
-    vendido = round(sum(v for _, v in ate_agora), 2)
-    por_faixa = {}
-    for m, v in ate_agora:
+    ate_agora = [(m, v, idv) for m, v, idv in vendas_dias[data] if m <= limite]
+    vendido = round(sum(v for _, v, _ in ate_agora), 2)
+    por_faixa, ids_faixa = {}, {}
+    for m, v, idv in ate_agora:
         k = faixa(m, passo_min)
         por_faixa[k] = round(por_faixa.get(k, 0.0) + v, 2)
+        ids_faixa.setdefault(k, set()).add(idv)
+    vendas_por_faixa = {k: len(ids) for k, ids in ids_faixa.items()}
 
     validos, descartados = _dias_validos(vendas_dias, mesmos)
     res = {"vendido": vendido, "fracao": None, "estimativa": None, "baixa": None,
            "alta": None, "aditivo": None, "dias": len(validos),
            "descartados": descartados, "media_total_historico": None, "avisos": [],
-           "por_faixa": por_faixa}
+           "por_faixa": por_faixa, "vendas_por_faixa": vendas_por_faixa}
     if not validos:
         res["avisos"].append("Sem dias anteriores com vendas no mesmo dia da semana.")
         return res

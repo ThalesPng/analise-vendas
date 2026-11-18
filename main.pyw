@@ -15,7 +15,7 @@ Módulos (todos na mesma pasta; este arquivo é só o ponto de entrada):
   relatorios/      regras de cada aba, sem I/O nem Tk: utils.py (helpers compartilhados),
                    participacao.py, historico.py (histórico por dia/faixa, grupos e estado
                    da seleção), projecao.py (fechamento estimado e perfil por hora) e
-                   vendas.py (quantidade de vendas)
+                   vendas.py (id_venda do item, usado para contar vendas)
   excel.py         exportação do histórico em .xlsx com gráfico (faz I/O; fica separado)
   interface/       pacote da interface gráfica (Tkinter), um módulo por parte: barra de
                    período, aba Participação, aba Histórico em Excel e aba Projeção do dia
