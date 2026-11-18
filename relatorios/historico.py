@@ -4,7 +4,9 @@ ou arquivo. A exportação para .xlsx fica em excel.py (na raiz), de propósito 
 
 Duas partes:
   Cálculo   historico_vendas (valor vendido por item em cada dia ou faixa de minutos) e
-            aplicar_grupos (troca os itens de um grupo por uma linha com a soma deles).
+            aplicar_grupos (acrescenta, para cada grupo, uma linha com a soma dos membros;
+            os membros continuam nos dados, então grupo e itens do grupo podem ir juntos
+            para o mesmo gráfico).
             historico_vendas recebe a FONTE por parâmetro, então pode ser testada com
             dados falsos.
   Estado    classe Grupos: o que está marcado na lista e os grupos criados pelo usuário
@@ -130,23 +132,25 @@ def _historico_por_faixa(dias, itens_dia, hora_ini, hora_fim, intervalo_min):
 
 
 def aplicar_grupos(hist, tipo, grupos):
-    """Troca, em hist[tipo], os itens de cada grupo por UMA linha com a soma deles,
-    coluna a coluna (as colunas já têm o intervalo escolhido: dia ou faixa de minutos).
-    `grupos` = {nome: códigos}. A linha do grupo usa a chave cfg.PREFIXO_GRUPO + nome
-    (o nome vai em hist["nomes"][tipo]). Grupo sem nenhum item com venda no período
-    não aparece. Retorna um novo hist (o original não muda), com
-    "composicao_grupos": {chave do grupo: [nomes dos itens]}."""
+    """Acrescenta, em hist[tipo], UMA linha por grupo com a soma dos membros, coluna a
+    coluna (as colunas já têm o intervalo escolhido: dia ou faixa de minutos). O grupo é
+    uma visão EXTRA: os membros continuam em hist[tipo] e um item pode estar em mais de
+    um grupo. `grupos` = {nome: códigos}. A linha do grupo usa a chave
+    cfg.PREFIXO_GRUPO + nome (o nome vai em hist["nomes"][tipo]); quem soma os itens
+    (ex.: TOTAL DO DIA) deve ignorar as chaves de grupo, senão conta em dobro. Grupo sem
+    nenhum membro com venda no período não aparece. Retorna um novo hist (o original não
+    muda), com "composicao_grupos": {chave do grupo: [nomes dos itens]}."""
     dados = {c: dict(v) for c, v in hist[tipo].items()}
     nomes = dict(hist["nomes"][tipo])
     composicao = {}
     for nome, cods in grupos.items():
-        membros = [c for c in cods if c in dados]
+        membros = [c for c in cods if c in hist[tipo]]
         if not membros:
             continue
         chave = cfg.PREFIXO_GRUPO + nome
         soma = {}
         for c in membros:
-            for col, v in dados.pop(c).items():
+            for col, v in hist[tipo][c].items():
                 soma[col] = soma.get(col, 0.0) + v
         dados[chave] = {col: round(v, 2) for col, v in soma.items()}
         composicao[chave] = sorted(nomes.get(c) or c for c in membros)
@@ -185,14 +189,19 @@ class Grupos:
             self.selecao[tipo] &= set(dados) | {cfg.PREFIXO_GRUPO + n for n in self.grupos[tipo]}
 
     def itens_lista(self, tipo, rotulo):
-        """Itens da lista de filtro: os que não estão em grupo + um item por grupo.
-        `rotulo(cod, nomes)` dá o texto de um item. Retorna ({chave: texto}, {chave: arrecadado})."""
+        """Itens da lista de filtro: TODOS os itens (os que estão em grupo ganham, no fim do
+        texto, o nome do(s) grupo(s)) + um item por grupo. `rotulo(cod, nomes)` dá o texto
+        de um item. Retorna ({chave: texto}, {chave: arrecadado})."""
         nomes, valores = self.nomes[tipo], self.valores[tipo]
-        agrupados = set().union(*self.grupos[tipo].values())
+        em_grupo = {}                                  # código -> nomes dos grupos dele
+        for nome, cods in self.grupos[tipo].items():
+            for c in cods:
+                em_grupo.setdefault(c, []).append(nome)
         textos, totais = {}, {}
         for c in nomes:
-            if c not in agrupados:
-                textos[c], totais[c] = rotulo(c, nomes), valores.get(c, 0.0)
+            textos[c], totais[c] = rotulo(c, nomes), valores.get(c, 0.0)
+            if c in em_grupo:
+                textos[c] += "  · " + ", ".join(sorted(em_grupo[c], key=str.lower))
         for nome, cods in self.grupos[tipo].items():
             chave = cfg.PREFIXO_GRUPO + nome
             n = sum(1 for c in cods if c in nomes)
@@ -225,23 +234,21 @@ class Grupos:
 
     def nomes_para_novo_grupo(self, tipo):
         """(nome padrão, nomes em uso em minúsculas) para pedir o nome do novo grupo.
-        Grupos marcados serão fundidos no novo, então seus nomes ficam livres."""
-        pref = cfg.PREFIXO_GRUPO
-        fundidos = {k[len(pref):] for k in self.selecao[tipo] if k.startswith(pref)}
-        usados = {n.lower() for n in self.grupos[tipo] if n not in fundidos}
+        Grupos marcados continuam existindo, então seus nomes também estão em uso."""
+        usados = {n.lower() for n in self.grupos[tipo]}
         n = 1
         while f"grupo_{n}" in usados:
             n += 1
         return f"Grupo_{n}", usados
 
     def agrupar(self, tipo, nome):
-        """Junta os itens marcados (e os grupos marcados, com seus itens) no grupo
-        `nome`, que fica como única marcação."""
+        """Cria o grupo `nome` com os itens marcados e os itens dos grupos marcados; os
+        grupos marcados continuam existindo. O novo grupo fica como única marcação."""
         pref = cfg.PREFIXO_GRUPO
         membros = set()
         for k in set(self.selecao[tipo]):
             if k.startswith(pref):
-                membros |= self.grupos[tipo].pop(k[len(pref):], set())
+                membros |= self.grupos[tipo].get(k[len(pref):], set())
             else:
                 membros.add(k)
         self.grupos[tipo][nome] = membros
@@ -251,7 +258,7 @@ class Grupos:
         return any(k.startswith(cfg.PREFIXO_GRUPO) for k in self.selecao[tipo])
 
     def desagrupar(self, tipo):
-        """Desfaz os grupos marcados; os itens deles voltam à lista, marcados."""
+        """Desfaz os grupos marcados; os itens deles (que nunca saem da lista) ficam marcados."""
         pref = cfg.PREFIXO_GRUPO
         for k in [k for k in self.selecao[tipo] if k.startswith(pref)]:
             membros = self.grupos[tipo].pop(k[len(pref):], set())

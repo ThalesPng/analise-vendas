@@ -4,7 +4,8 @@ historico.py — aba "Histórico (Excel)": sem tela de resultado própria; o res
 escolhe o que entra: produtos ou departamentos, soma por dia ou por faixa de minutos e
 quais itens entram no gráfico (seleção individual ou "Marcar todos" os itens da busca;
 sem seleção, os 10 maiores). Os itens marcados podem ser agrupados: o grupo vira um item
-da lista que soma seus membros no mesmo intervalo (dia ou faixa de minutos).
+extra da lista que soma seus membros no mesmo intervalo (dia ou faixa de minutos); os
+membros continuam na lista, então grupo e itens do grupo podem ir juntos ao gráfico.
 Recebe os itens carregados em receber() para montar a lista de filtro. O estado
 (seleção e grupos) fica em relatorios.historico.Grupos, sem Tk; aqui só se desenha e se repassam os cliques.
 """
@@ -137,7 +138,7 @@ class AbaHistorico(ttk.Frame):
     # ── Grupos ───────────────────────────────────────────────────────────────
 
     def _agrupar(self):
-        """Junta os itens marcados (e grupos marcados) num único grupo."""
+        """Cria um grupo com os itens marcados (e os itens dos grupos marcados, que continuam existindo)."""
         tipo = self.var_hist.get()
         if not self.estado.pode_agrupar(tipo):
             messagebox.showinfo("Agrupar", "Marque 2 ou mais itens.", parent=self.app.root)
@@ -152,7 +153,7 @@ class AbaHistorico(ttk.Frame):
         self._preencher_lista()
 
     def _desagrupar(self):
-        """Desfaz os grupos marcados; os itens voltam à lista, marcados."""
+        """Desfaz os grupos marcados; os itens deles ficam marcados."""
         tipo = self.var_hist.get()
         if not self.estado.tem_grupo_marcado(tipo):
             messagebox.showinfo("Desagrupar", "Marque um grupo.", parent=self.app.root)
@@ -204,7 +205,7 @@ class AbaHistorico(ttk.Frame):
             hist = historico_vendas(FONTE_PADRAO, ini, fim, hora_ini, hora_fim, intervalo)
             if not hist[tipo]:
                 return None
-            hist = aplicar_grupos(hist, tipo, grupos)      # soma de cada grupo, por coluna
+            hist = aplicar_grupos(hist, tipo, grupos)      # linha extra com a soma de cada grupo
             return exportar_historico_xlsx(tipo, hist, selecionados=selecionados)
 
         def ao_terminar(caminho):

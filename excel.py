@@ -45,9 +45,10 @@ def _estilos():
 
 def _escrever_tabela(ws, tipo, hist, ordem, est):
     """Aba Histórico: título, cabeçalho, uma linha por item (na ordem `ordem`), TOTAL por
-    item e TOTAL DO DIA, tudo com fórmulas; depois as notas (dias sem vendas e a
-    composição dos grupos). Retorna as posições que o gráfico precisa:
-    {"lin_cab", "lin_ini", "n_dias"}."""
+    item e TOTAL DO DIA (só dos itens), tudo com fórmulas; depois, num bloco à parte, uma
+    linha por grupo (soma dos membros, que já estão acima — por isso não entram no TOTAL
+    DO DIA) e as notas (dias sem vendas e a composição dos grupos). Retorna as posições
+    que o gráfico precisa: {"lin_cab", "n_dias", "linhas": {chave do item/grupo: linha}}."""
     from openpyxl.styles import Alignment
     from openpyxl.utils import get_column_letter as letra
 
@@ -57,10 +58,13 @@ def _escrever_tabela(ws, tipo, hist, ordem, est):
 
     n_dias = len(datas)
     col_total = n_dias + 2
+    itens = [c for c in ordem if not c.startswith(cfg.PREFIXO_GRUPO)]
+    grupos = [c for c in ordem if c.startswith(cfg.PREFIXO_GRUPO)]
     lin_cab = 2
     lin_ini = lin_cab + 1
-    lin_fim = lin_ini + len(ordem) - 1
+    lin_fim = lin_ini + len(itens) - 1
     lin_total = lin_fim + 1
+    linhas = {c: lin_ini + i for i, c in enumerate(itens)}
 
     ws["A1"] = (f"Histórico de vendas - {cfg.TITULOS[tipo]} - "
                 f"{hist['periodo_txt'].replace('-', '/')}")
@@ -76,9 +80,7 @@ def _escrever_tabela(ws, tipo, hist, ordem, est):
         c.font, c.fill = est.f_cab, est.preench_cab
         c.alignment = Alignment(horizontal="left" if j == 1 else "right")
 
-    # Linhas de itens (dia sem venda do item = célula vazia)
-    for i, cod in enumerate(ordem):
-        lin = lin_ini + i
+    def linha_item(lin, cod):    # dia sem venda do item = célula vazia
         ws.cell(lin, 1, _rotulo_completo(cod, nomes)).font = est.f_norm
         for j, d in enumerate(datas, start=2):
             v = dados[cod].get(d)
@@ -86,6 +88,9 @@ def _escrever_tabela(ws, tipo, hist, ordem, est):
             c.number_format, c.font = est.fmt_valor, est.f_norm
         c = ws.cell(lin, col_total, f"=SUM({letra(2)}{lin}:{letra(col_total - 1)}{lin})")
         c.number_format, c.font = est.fmt_valor, est.f_neg
+
+    for cod, lin in linhas.items():
+        linha_item(lin, cod)
 
     # TOTAL DO DIA (considera todos os itens) e total geral
     ws.cell(lin_total, 1, "TOTAL DO DIA" if hist["unidade"] == "dia" else "TOTAL DA FAIXA")
@@ -98,6 +103,14 @@ def _escrever_tabela(ws, tipo, hist, ordem, est):
             c.number_format = est.fmt_valor
 
     lin_nota = lin_total + 2
+    if grupos:    # grupos: soma de itens já listados acima, fora do TOTAL
+        ws.cell(lin_nota, 1, "GRUPOS (soma dos itens acima; não entram no total)"
+                ).font = est.f_neg
+        for cod in grupos:
+            lin_nota += 1
+            linhas[cod] = lin_nota
+            linha_item(lin_nota, cod)
+        lin_nota += 2
     if hist["dias_sem_vendas"]:
         ws.cell(lin_nota, 1,
                 ("Dias sem vendas: " if hist["unidade"] == "dia" else "Faixas sem vendas: ")
@@ -114,28 +127,31 @@ def _escrever_tabela(ws, tipo, hist, ordem, est):
     for j in range(2, col_total + 1):
         ws.column_dimensions[letra(j)].width = 14 if j == col_total else 13
     ws.freeze_panes = ws.cell(lin_ini, 2)
-    return {"lin_cab": lin_cab, "lin_ini": lin_ini, "n_dias": n_dias}
+    return {"lin_cab": lin_cab, "n_dias": n_dias, "linhas": linhas}
 
 
 def _montar_grafico(wb, ws, tipo, hist, ordem, selecionados, pos, est):
     """Aba Gráfico: uma linha por item ligando o valor vendido em cada dia, lendo as
     células da aba `ws` (posições em `pos`, de _escrever_tabela). Itens: os de
-    `selecionados`; sem seleção, os MAX_SERIES_GRAFICO maiores. Deixa o gráfico
-    como aba ativa ao abrir."""
+    `selecionados` (itens e/ou grupos); sem seleção, os MAX_SERIES_GRAFICO maiores ITENS
+    (grupos só entram se escolhidos). Deixa o gráfico como aba ativa ao abrir."""
     from openpyxl.chart import LineChart, Reference, Series
     from openpyxl.chart.data_source import StrRef
     from openpyxl.chart.series import SeriesLabel
 
-    lin_cab, lin_ini, n_dias = pos["lin_cab"], pos["lin_ini"], pos["n_dias"]
+    lin_cab, n_dias, linhas = pos["lin_cab"], pos["n_dias"], pos["linhas"]
     escolhidos = [c for c in ordem if selecionados and c in selecionados]
+    itens = [c for c in ordem if not c.startswith(cfg.PREFIXO_GRUPO)]
     if escolhidos:
-        linhas_graf = [lin_ini + ordem.index(c) for c in escolhidos]
+        linhas_graf = [linhas[c] for c in escolhidos]
+        total = len(ordem)
     else:
-        linhas_graf = list(range(lin_ini, lin_ini + min(MAX_SERIES_GRAFICO, len(ordem))))
+        linhas_graf = [linhas[c] for c in itens[:MAX_SERIES_GRAFICO]]
+        total = len(itens)
     n_series = len(linhas_graf)
     wg = wb.create_sheet("Gráfico")
     tit = cfg.TITULOS[tipo].capitalize()
-    if n_series < len(ordem):
+    if n_series < total:
         tit += f" - {n_series} selecionados" if escolhidos else f" - {n_series} maiores"
     graf = LineChart()
     graf.title = f"Vendas por {'dia' if hist['unidade'] == 'dia' else 'faixa de horário'} - {tit}"
@@ -157,10 +173,10 @@ def _montar_grafico(wb, ws, tipo, hist, ordem, selecionados, pos, est):
     graf.display_blanks = "span"     # dia sem venda do item: a linha liga o dia anterior ao seguinte
     graf.width, graf.height = 32, 16
     wg.add_chart(graf, "A3")
-    if n_series < len(ordem):
+    if n_series < total:
         wg["A1"] = ((f"Gráfico com os {n_series} itens selecionados; " if escolhidos
                      else f"Gráfico com os {n_series} maiores itens do período; ")
-                    + f"a aba Histórico tem todos os {len(ordem)}.")
+                    + f"a aba Histórico tem todos os {total}.")
         wg["A1"].font = est.f_norm
 
     # Abre direto no gráfico (e sem deixar as duas abas "agrupadas")
