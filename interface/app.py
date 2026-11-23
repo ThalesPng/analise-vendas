@@ -2,7 +2,7 @@
 app.py — janela principal (Tkinter) do relatório de vendas e ponto de partida (main).
 
 A App só monta a janela: barra de período, abas e barra de status. Cada aba é uma
-classe própria (participacao.py, historico.py, projecao.py) e usa da App apenas:
+classe própria (participacao.py, historico.py, projecao.py, desvios.py) e usa da App apenas:
 root, executor, ocupado, ocupar(), erro() e ler_periodo(). O botão "Carregar vendas" (F5) lê as vendas uma vez e entrega
 os itens às abas Participação e Histórico via receber(itens).
 """
@@ -17,6 +17,7 @@ from tkinter import messagebox, ttk
 from banco import FONTE_PADRAO
 
 from .barra_periodo import BarraPeriodo
+from .desvios import AbaDesvios
 from .formato import brl, dkey, parse_data
 from .historico import AbaHistorico
 from .participacao import AbaParticipacao
@@ -40,10 +41,22 @@ class App:
         self.ocupado = False
 
         self._montar(data_ini, data_fim)
+        self._fixar_tamanho()
         root.bind("<F5>", lambda e: self.carregar())
         root.bind("<F6>", lambda e: self.projecao.projetar())
+        root.bind("<F7>", lambda e: self.desvios.analisar())
 
     # ── Montagem da janela ───────────────────────────────────────────────────
+
+    def _fixar_tamanho(self):
+        """Dá à janela um tamanho EXPLÍCITO (o que o conteúdo pede na abertura). Sem isso o Tk
+        reajusta a janela ao conteúdo toda vez que algum widget muda de tamanho pedido (tabela
+        que encolhe, aba que aparece, texto novo). Com o tamanho definido, só o usuário o muda
+        (arrastando a borda ou maximizando); nenhum método da tela mexe nele."""
+        self.root.update_idletasks()
+        largura = min(max(self.root.winfo_reqwidth(), 860), self.root.winfo_screenwidth())
+        altura = min(max(self.root.winfo_reqheight(), 600), self.root.winfo_screenheight())
+        self.root.geometry(f"{largura}x{altura}")
 
     def _montar(self, data_ini, data_fim):
         raiz = ttk.Frame(self.root, padding=10)
@@ -58,9 +71,11 @@ class App:
         self.participacao = AbaParticipacao(self.abas, self)
         self.historico = AbaHistorico(self.abas, self)
         self.projecao = AbaProjecao(self.abas, self)
+        self.desvios = AbaDesvios(self.abas, self)
         self.abas.add(self.participacao, text="  Participação  ")
         self.abas.add(self.historico, text="  Histórico (Excel)  ")
         self.abas.add(self.projecao, text="  Projeção do dia  ")
+        self.abas.add(self.desvios, text="  Desvios do dia  ")
 
         # Barra de status
         barra = ttk.Frame(raiz)
@@ -72,7 +87,7 @@ class App:
 
     def ocupar(self, ocupado, mensagem=None):
         self.ocupado = ocupado
-        for parte in (self.barra, self.historico, self.projecao):
+        for parte in (self.barra, self.historico, self.projecao, self.desvios):
             parte.definir_ocupado(ocupado)
         if mensagem is not None:
             self.var_status.set(mensagem)
