@@ -50,6 +50,9 @@ TITULOS = {"produtos": "PRODUTOS", "departamentos": "DEPARTAMENTOS"}
 MAX_DIAS_HISTORICO = 31
 INTERVALO_MIN, INTERVALO_MAX = 1, 1440
 
-# Projeção: semanas da base e tamanho da faixa horária (minutos).
+# Desvios do dia: período máximo analisado de uma vez (dias).
+MAX_DIAS_DESVIOS = 31
+
+# Projeção e Desvios do dia: semanas da base e tamanho da faixa horária (minutos).
 SEMANAS_MIN, SEMANAS_MAX = 2, 26
 PASSO_MIN, PASSO_MAX = 5, 240

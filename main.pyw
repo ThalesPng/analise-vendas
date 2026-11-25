@@ -1,10 +1,10 @@
 """
-main.pyw — relatórios de vendas (participação, histórico em Excel, projeção do dia)
-com acesso "tipo banco de dados" às vendas.
+main.pyw — relatórios de vendas (participação, histórico em Excel, projeção do dia, desvios
+do dia) com acesso "tipo banco de dados" às vendas.
 
 Camadas
 -------
-  FONTE (trocável)  ->  itens  ->  agrupar() / historico_vendas() / projetar_dia()  ->  janela (Tkinter)
+  FONTE (trocável)  ->  itens  ->  agrupar() / historico_vendas() / projetar_dia() / analisar_periodo()  ->  janela (Tkinter)
   fonte(data_ini, data_fim, hora_ini, hora_fim)
 
 Módulos (todos na mesma pasta; este arquivo é só o ponto de entrada):
@@ -14,11 +14,13 @@ Módulos (todos na mesma pasta; este arquivo é só o ponto de entrada):
                    caixa e os devolve em listar_vendas(); sai quando tudo vier do banco
   relatorios/      regras de cada aba, sem I/O nem Tk: utils.py (helpers compartilhados),
                    participacao.py, historico.py (histórico por dia/faixa, grupos e estado
-                   da seleção), projecao.py (fechamento estimado e perfil por hora) e
+                   da seleção), projecao.py (fechamento estimado e perfil por hora),
+                   desvios.py (dias fora do padrão e o que explica o desvio) e
                    vendas.py (id_venda do item, usado para contar vendas)
   excel.py         exportação do histórico em .xlsx com gráfico (faz I/O; fica separado)
   interface/       pacote da interface gráfica (Tkinter), um módulo por parte: barra de
-                   período, aba Participação, aba Histórico em Excel e aba Projeção do dia
+                   período, aba Participação, aba Histórico em Excel, aba Projeção do dia e
+                   aba Desvios do dia (com os textos do resumo em texto_desvios.py)
 
 A FONTE é o equivalente a uma consulta ao banco: devolve as linhas de venda
 (itens) do período — e da faixa de horas, se houver — de TODOS os caixas. As

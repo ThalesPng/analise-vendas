@@ -15,12 +15,16 @@ Módulos
                       itens do gráfico, grupos — o estado deles fica em relatorios/historico.py).
   projecao.py         fechamento estimado do dia + curva média de vendas por hora.
                       Tem datas/horas próprias: não usa a barra de período.
+  desvios.py          dias do período fora do padrão e, para o dia escolhido, o resumo
+                      da análise + horário, departamentos/produtos e maiores vendas.
+                      Usa as datas da barra de período (ignora as horas).
+  texto_desvios.py    sem Tkinter: linha de cada dia na lista e resumo em frases.
   widgets.py          HoraEntry, campo_data, pedir_nome (pop-up), Executor (thread).
   formato.py          helpers puros de formatação e leitura de datas/horas.
 
 A coleta e a geração do xlsx rodam numa thread, então a janela não trava.
 Cálculos e estado dos grupos em relatorios/ (utils, participação, histórico, projeção
-do dia); a exportação do histórico, em excel.py; a coleta, em banco.py.
+do dia, desvios do dia); a exportação do histórico, em excel.py; a coleta, em banco.py.
 """
 
 from .app import main
