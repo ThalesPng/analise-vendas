@@ -64,12 +64,24 @@ class Grafico(ttk.Frame):
         self.ax = self.fig.add_subplot(111)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        self._dicas = []            # [(coluna, texto)] do desenho atual
+        self._dica = None           # anotação que mostra o texto ao passar o mouse
+        self._dica_atual = None     # texto visível agora (None = escondida)
+        self.canvas.mpl_connect("motion_notify_event", self._ao_mover)
+        self.canvas.mpl_connect("figure_leave_event", self._ao_sair)
 
     def iniciar(self, vazio=None):
         """Limpa o desenho anterior. Com `vazio` (texto), mostra só a mensagem e devolve False:
         o gráfico não tem o que desenhar. Senão, deixa o eixo pronto e devolve True."""
         ax = self.ax
         ax.clear()
+        self._dicas = []
+        self._dica_atual = None
+        self._dica = ax.annotate(
+            "", xy=(0, 0), xytext=(10, 10), textcoords="offset points", fontsize=8, zorder=10,
+            visible=False, annotation_clip=False,
+            bbox={"boxstyle": "round,pad=0.4", "fc": "white", "ec": COR_TEXTO_FRACO})
+        self._dica.set_in_layout(False)     # aparecer/sumir não pode mexer no layout do gráfico
         if vazio is not None:
             ax.set_axis_off()
             ax.text(0.5, 0.5, vazio, ha="center", va="center", transform=ax.transAxes,
@@ -92,6 +104,41 @@ class Grafico(ttk.Frame):
         self.ax.legend(handles=itens, loc="lower left", bbox_to_anchor=(0, 1.0),
                        ncol=len(itens), frameon=False, fontsize=8, columnspacing=1.2,
                        handlelength=1.2)
+
+    def registrar_dicas(self, colunas, textos):
+        """Texto que aparece ao passar o mouse sobre cada coluna (`colunas`: os retângulos de
+        ax.bar(...).patches, na mesma ordem de `textos`). Chamar depois de desenhar."""
+        self._dicas.extend(zip(colunas, textos, strict=True))
+
+    def _ao_mover(self, evento):
+        texto = None
+        if evento.inaxes is self.ax:
+            texto = next((t for coluna, t in self._dicas if coluna.contains(evento)[0]), None)
+        if texto is None:
+            self._esconder_dica()
+            return
+        # Perto da borda direita/superior a caixa abre para o outro lado, para não cortar.
+        caixa = self.ax.bbox
+        direita = (evento.x - caixa.x0) / caixa.width > 0.6
+        topo = (evento.y - caixa.y0) / caixa.height > 0.75
+        dica = self._dica
+        dica.set_text(texto)
+        dica.xy = (evento.xdata, evento.ydata)
+        dica.xyann = (-10 if direita else 10, -10 if topo else 10)
+        dica.set_horizontalalignment("right" if direita else "left")
+        dica.set_verticalalignment("top" if topo else "bottom")
+        dica.set_visible(True)
+        self._dica_atual = texto
+        self.canvas.draw_idle()
+
+    def _ao_sair(self, _evento):
+        self._esconder_dica()
+
+    def _esconder_dica(self):
+        if self._dica_atual is not None:
+            self._dica.set_visible(False)
+            self._dica_atual = None
+            self.canvas.draw_idle()
 
     def nota_rodape(self, texto):
         self.ax.set_xlabel(texto, fontsize=8, color=COR_TEXTO_FRACO)
