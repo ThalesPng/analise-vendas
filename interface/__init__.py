@@ -19,6 +19,9 @@ Módulos
                       da análise + horário, departamentos/produtos e maiores vendas.
                       Usa as datas da barra de período (ignora as horas).
   texto_desvios.py    sem Tkinter: linha de cada dia na lista e resumo em frases.
+  graficos/           gráficos (matplotlib dentro do Tkinter), um módulo por gráfico:
+                      comum.py (classe-mãe, cores, formatadores) e desvios.py (colunas
+                      real x esperado por dia, da aba Desvios do dia, com cor por desvio).
   widgets.py          HoraEntry, campo_data, pedir_nome (pop-up), Executor (thread).
   formato.py          helpers puros de formatação e leitura de datas/horas.
 

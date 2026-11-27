@@ -4,22 +4,26 @@ dias da semana das últimas semanas e, para o dia escolhido na lista, mostra: se
 se é uma venda pontual, quando aconteceu, se vieram mais vendas ou um ticket diferente,
 quem puxou (departamentos e produtos, em abas separadas) e se foi quantidade ou preço.
 
-Dois estados: depois de Analisar só a tabela de dias aparece; ao escolher um dia, a tabela
-encolhe para a linha dele, aparecem os detalhes e o botão "Selecionar dia" (ao lado do
-Analisar) volta ao estado anterior.
+Três estados: depois de Analisar só a tabela de dias aparece (com o botão "Mostrar gráfico"
+ao lado esquerdo do Analisar); ao escolher um dia, a tabela encolhe para a linha dele, aparecem
+os detalhes e o botão "Selecionar dia" (ao lado do Analisar) volta à tabela; com "Mostrar
+gráfico" o gráfico de colunas (real x esperado por dia, de faturamento ou de vendas, à
+escolha ao lado de Base/Faixa) ocupa o lugar da tabela e o mesmo botão passa a "Selecionar
+dia", que volta à tabela.
 
 Usa as DATAS da barra de período (as horas são ignoradas: o passo "quando" acha sozinho o
 horário do desvio) e não depende do "Carregar vendas": lê o que precisa por conta própria.
 Cálculos em relatorios/desvios.py; os textos em texto_desvios.py.
 """
 
+import threading
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import messagebox, ttk
 
 import config as cfg
 from banco import FONTE_PADRAO
-from relatorios.desvios import analisar_periodo, principais
+from relatorios.desvios import analisar_periodo, principais, serie_diaria
 
 from .formato import brl, dkey, qtde
 from .texto_desvios import linha_lista, linhas_resumo, n1, n1s, nome_de, rs
@@ -100,7 +104,12 @@ class AbaDesvios(ttk.Frame):
         self.filtro_dep = None      # departamento escolhido na tabela de participantes
         self._ordem = []            # datas na ordem da lista (para reexibir as linhas escondidas)
         self._trocando = False      # True enquanto o código mexe na lista/seleção
+        self._modo = "lista"        # "lista" (tabela de dias), "grafico" ou "detalhe" (um dia)
+        self._grafico = None        # GraficoDias, criado ao abrir o gráfico pela 1ª vez
+        self._ocupado = False
+        self._tem_dias = False      # a última análise trouxe dias?
         self._montar()
+        self.after(1000, self._pre_carregar_grafico)
 
     # ── Montagem ─────────────────────────────────────────────────────────────
 
@@ -117,10 +126,18 @@ class AbaDesvios(ttk.Frame):
         self.spin_passo.set(60)
         self.spin_passo.pack(side="left", padx=4)
         ttk.Label(topo, text="min").pack(side="left")
+        # Só aparece com o gráfico na tela; empacotado por último, fica à direita de Faixa.
+        self.combo_ind = ttk.Combobox(topo, state="readonly", width=12,
+                                      values=("Faturamento", "Vendas"))
+        self.combo_ind.set("Faturamento")
+        self.combo_ind.bind("<<ComboboxSelected>>", lambda _e: self._desenhar_grafico())
         self.btn = ttk.Button(topo, text="Analisar (F7)", command=self.analisar)
         self.btn.pack(side="right")
         # Só aparece com um dia escolhido; empacotado depois do Analisar, fica à esquerda dele.
         self.btn_sel = ttk.Button(topo, text="Selecionar dia", command=self._modo_lista)
+        # Também à esquerda do Analisar; no lugar dele quando um dia está nos detalhes.
+        self.btn_grafico = ttk.Button(topo, text="Mostrar gráfico",
+                                      command=self._alternar_grafico, state="disabled")
         ttk.Label(self, foreground="#666666", wraplength=820, justify="left",
                   text="Analisa cada dia do período da barra (horas ignoradas) contra os "
                        "mesmos dias da semana. Escolha um dia na lista para ver os detalhes."
@@ -143,6 +160,7 @@ class AbaDesvios(ttk.Frame):
         self._montar_horario()
         self._montar_participantes()
         self._montar_vendas()
+        self._modo_lista()
 
     def _montar_resumo(self):
         quadro = ttk.Frame(self.det, padding=4)
@@ -224,6 +242,8 @@ class AbaDesvios(ttk.Frame):
         estado = "disabled" if ocupado else "normal"
         self.btn.configure(state=estado)
         self.btn_sel.configure(state=estado)
+        self._ocupado = ocupado
+        self._estado_btn_grafico()
 
     # ── Análise ──────────────────────────────────────────────────────────────
 
@@ -281,24 +301,34 @@ class AbaDesvios(ttk.Frame):
         if not res["dias"]:
             aviso = " ".join(x for x in ("Nenhum dia encerrado no período.", aviso) if x)
         self.var_ignorados.set(aviso)
-        # Depois de Analisar, só a tabela de dias: nenhum dia vem escolhido.
-        self._modo_lista()
+        self._tem_dias = bool(res["dias"])
+        if self._modo == "grafico":
+            self._desenhar_grafico()        # quem está no gráfico continua nele, já atualizado
+            self._estado_btn_grafico()
+        else:
+            # Depois de Analisar, só a tabela de dias: nenhum dia vem escolhido.
+            self._modo_lista()
 
     # ── Estados da tela: lista de dias x detalhes de um dia ──────────────────
 
     def _modo_lista(self):
         """Estado inicial: tabela de dias inteira; detalhes e botão "Selecionar dia" saem."""
+        self._modo = "lista"
         self._trocando = True
         try:
             self.det.pack_forget()
             self.btn_sel.pack_forget()
+            self.combo_ind.pack_forget()
+            if self._grafico is not None:
+                self._grafico.pack_forget()
             for n, data in enumerate(self._ordem):
                 self.tree.move(data, "", n)             # reexibe as linhas escondidas
             self.tree.selection_remove(*self.tree.selection())
             self.tree.configure(height=_ALTURA_LISTA)
-            self.quadro_lista.pack_configure(fill="both", expand=True)
             self.cima.pack_configure(fill="both", expand=True)
             self.lbl_ignorados.pack(anchor="w", pady=(4, 6))
+            self.quadro_lista.pack(fill="both", expand=True, before=self.lbl_ignorados)
+            self._mostrar_btn_grafico("Mostrar gráfico")
         finally:
             self._trocando = False
         self.dia = None
@@ -307,8 +337,10 @@ class AbaDesvios(ttk.Frame):
 
     def _modo_detalhe(self, data):
         """Dia escolhido: a tabela encolhe para a linha dele e os detalhes aparecem."""
+        self._modo = "detalhe"
         self._trocando = True
         try:
+            self.btn_grafico.pack_forget()
             for outra in self._ordem:
                 if outra != data:
                     self.tree.detach(outra)
@@ -321,6 +353,70 @@ class AbaDesvios(ttk.Frame):
             self.btn_sel.pack(side="right", padx=(0, 6))
         finally:
             self._trocando = False
+
+    # ── Gráfico de colunas (no lugar da tabela de dias) ──────────────────────
+
+    def _mostrar_btn_grafico(self, texto):
+        """Botão à esquerda do Analisar (empacotado depois dele); some nos detalhes de um dia."""
+        self.btn_grafico.configure(text=texto)
+        self.btn_grafico.pack(side="right", padx=(0, 6))
+        self._estado_btn_grafico()
+
+    def _estado_btn_grafico(self):
+        """Mostrar gráfico precisa de dias analisados; Selecionar dia (sair do gráfico) não."""
+        pode = not self._ocupado and (self._tem_dias or self._modo == "grafico")
+        self.btn_grafico.configure(state="normal" if pode else "disabled")
+
+    def _alternar_grafico(self):
+        if self._modo == "grafico":
+            self._modo_lista()
+        else:
+            self._modo_grafico()
+
+    def _pre_carregar_grafico(self):
+        """Carrega o matplotlib em segundo plano logo após a abertura: importá-lo e desenhar o
+        1º gráfico leva alguns segundos, que assim não caem no clique do botão."""
+        def tarefa():
+            try:
+                from .graficos import comum
+                comum.pre_carregar()
+            except Exception:
+                pass        # sem matplotlib (ou falha qualquer): o aviso sai ao clicar no botão
+        threading.Thread(target=tarefa, daemon=True).start()
+
+    def _obter_grafico(self):
+        """Cria o gráfico na 1ª vez. Sem matplotlib instalado, avisa e devolve None."""
+        if self._grafico is None:
+            try:
+                from .graficos.desvios import GraficoDias
+            except ImportError:
+                messagebox.showwarning(
+                    "Desvios do dia", "O gráfico precisa da biblioteca matplotlib.\n"
+                    "Instale com:  pip install matplotlib", parent=self.app.root)
+                return None
+            self._grafico = GraficoDias(self.cima)
+        return self._grafico
+
+    def _modo_grafico(self):
+        grafico = self._obter_grafico()
+        if grafico is None:
+            return
+        self._modo = "grafico"
+        self.quadro_lista.pack_forget()
+        self.lbl_ignorados.pack(anchor="w", pady=(4, 6))
+        grafico.pack(fill="both", expand=True, before=self.lbl_ignorados)
+        self.combo_ind.pack(side="left", padx=(14, 0))
+        self._mostrar_btn_grafico("Selecionar dia")
+        self._desenhar_grafico()
+
+    def _desenhar_grafico(self):
+        if self._grafico is None:
+            return
+        indicador = "faturamento" if self.combo_ind.get() == "Faturamento" else "vendas"
+        dias = self.resultado["dias"] if self.resultado else []
+        self._grafico.mostrar(serie_diaria(dias, indicador), indicador,
+                              vazio="Nenhum dia encerrado no período." if self.resultado
+                              else "Use Analisar para ver o gráfico.")
 
     def _selecionar(self, _evento=None):
         if self._trocando:

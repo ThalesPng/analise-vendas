@@ -1,3 +1,4 @@
 tkcalendar
 openpyxl
 pyodbc
+matplotlib

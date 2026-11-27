@@ -484,3 +484,25 @@ def analisar_periodo(fonte, data_ini, data_fim=None, semanas=8, passo_min=60, ho
     for d in analisaveis:
         resultado["dias"].append(_analisar_dia(d, por_dia, resumos, semanas, passo_min))
     return resultado
+
+
+def serie_diaria(dias, indicador):
+    """Números do gráfico de colunas: um item por dia analisado, na ordem dos dias, com o
+    valor real e o esperado pela base ({"data", "dia_semana", "real", "esperado", "estado"};
+    esperado é None nos dias sem base). `indicador`: "faturamento" ou "vendas".
+    "estado" (do indicador mostrado): "alto" / "baixo" = fora do padrão para cima / para baixo,
+    "pontual" = faturamento alto explicado por uma venda isolada, None = dentro do padrão."""
+    chave, campo = (("faturamento", "total") if indicador == "faturamento"
+                    else ("num_vendas", "vendas"))
+    serie = []
+    for a in dias:
+        ind = a.get(chave)
+        estado = None
+        if ind and ind["anomalo"]:
+            if a["veredito"] == "pontual" and indicador == "faturamento":
+                estado = "pontual"
+            else:
+                estado = "alto" if ind["direcao"] > 0 else "baixo"
+        serie.append({"data": a["data"], "dia_semana": a["dia_semana"], "real": a[campo],
+                      "esperado": ind["esperado"] if ind else None, "estado": estado})
+    return serie
